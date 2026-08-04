@@ -1,0 +1,45 @@
+name: Scrape federal document sources
+
+on:
+  schedule:
+    - cron: "15 */3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scrape-feeds
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scrapers and build feeds
+        env:
+          SCRAPER_CONTACT_EMAIL: ${{ secrets.SCRAPER_CONTACT_EMAIL }}
+          FEC_API_KEY: ${{ secrets.FEC_API_KEY }}
+          LDA_API_KEY: ${{ secrets.LDA_API_KEY }}
+          COURTLISTENER_TOKEN: ${{ secrets.COURTLISTENER_TOKEN }}
+          CONGRESS_API_KEY: ${{ secrets.CONGRESS_API_KEY }}
+        run: python build_feeds.py
+
+      - name: Commit updated feeds
+        run: |
+          git config user.name "gov-doc-tracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/
+          git diff --quiet --cached || git commit -m "Update feeds [automated]"
+          git push
