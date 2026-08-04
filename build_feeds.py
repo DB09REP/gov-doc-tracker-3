@@ -7,6 +7,9 @@ per-source state. RSS readers dedupe by <guid> on their end, so a feed
 that always contains the latest ~200 items per category works fine and
 keeps this script simple and stateless.
 """
+import html
+import os
+import re
 import sys
 import traceback
 from datetime import datetime, timezone
@@ -86,30 +89,73 @@ def run_all_scrapers():
     return all_items
 
 
+_MOJIBAKE_CTRL = re.compile("[\x80-\x9f]")  # stray Windows-1252 bytes mis-decoded as raw control chars
+
+
+def _clean_text(value):
+    """Fix double-escaped HTML entities (some source APIs, e.g. DOJ, already
+    return HTML-entity-encoded text like 'AT&amp;T'; feedgen escapes again
+    on write, producing 'AT&amp;amp;T') and strip stray mojibake control
+    bytes (e.g. a smart quote that got mis-decoded into \\x92).
+    """
+    if not value:
+        return ""
+    value = html.unescape(value)
+    value = _MOJIBAKE_CTRL.sub("", value)
+    return value
+
+
+def _pages_base_url():
+    """Best-effort guess at this repo's GitHub Pages base URL, used only
+    for the feed's self-referencing <atom:link>. Falls back to a generic
+    placeholder when run outside GitHub Actions (e.g. local testing).
+    """
+    repo = os.environ.get("GITHUB_REPOSITORY")  # "owner/repo", set automatically in Actions
+    if repo and "/" in repo:
+        owner, name = repo.split("/", 1)
+        return f"https://{owner}.github.io/{name}"
+    return "https://example.invalid/gov-doc-tracker"
+
+
 def build_feed(title, description, link, items, out_path):
     fg = FeedGenerator()
     fg.title(title)
     fg.link(href=link, rel="alternate")
+    fg.link(href=f"{_pages_base_url()}/feeds/{out_path.name}", rel="self")
     fg.description(description)
     fg.language("en")
 
-    items_sorted = sorted(items, key=lambda i: _parse_date(i.get("published")), reverse=True)
+    # De-duplicate by id — RSS requires unique guids per feed, and at least
+    # one source (FEC) can legitimately return the same underlying filing
+    # more than once (e.g. joint filings tied to multiple committees).
+    # Keep first occurrence (already sorted newest-first at this point... 
+    # actually dedupe before sort so "first seen" order doesn't matter).
+    seen_ids = set()
+    deduped = []
+    for item in items:
+        if item["id"] in seen_ids:
+            continue
+        seen_ids.add(item["id"])
+        deduped.append(item)
+
+    items_sorted = sorted(deduped, key=lambda i: _parse_date(i.get("published")), reverse=True)
     for item in items_sorted[:200]:
         fe = fg.add_entry()
         fe.id(item["id"])
-        fe.title(item["title"][:300])
+        fe.title(_clean_text(item["title"])[:300])
         fe.link(href=item["link"])
-        fe.description(item.get("summary", ""))
+        fe.description(_clean_text(item.get("summary", "")))
         fe.pubDate(_parse_date(item.get("published")))
         fe.source(item.get("source_name", ""))
 
     fg.rss_file(str(out_path))
-    print(f"wrote {out_path} ({len(items_sorted[:200])} items)")
+    print(f"wrote {out_path} ({len(items_sorted[:200])} items, {len(items) - len(deduped)} duplicate ids dropped)")
 
 
 def main():
     all_items = run_all_scrapers()
 
+    # Combined feed, everything
     build_feed(
         title="Federal Document Tracker — All Sources",
         description="Combined feed across SEC, FEC, lobbying, courts/DOJ, Congress/oversight, and adjacent federal sources.",
@@ -118,6 +164,7 @@ def main():
         out_path=OUT_DIR / "all.xml",
     )
 
+    # One feed per dashboard category
     for cat, label in CATEGORY_LABELS.items():
         cat_items = [i for i in all_items if i.get("category") == cat]
         build_feed(
@@ -128,6 +175,7 @@ def main():
             out_path=OUT_DIR / f"{cat}.xml",
         )
 
+    # Simple index page linking to all feeds
     index_html = ["<html><head><title>Federal Document Tracker Feeds</title></head><body>",
                   "<h1>Federal Document Tracker — RSS Feeds</h1>",
                   f"<p>Last built: {datetime.now(timezone.utc).isoformat()}</p>",
