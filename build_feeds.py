@@ -1,11 +1,10 @@
 """Run every scraper, then write one combined RSS feed and one feed per
 dashboard category into docs/feeds/ (served via GitHub Pages).
 
-Design choice: each run fetches "recent" items fresh (last N per source,
-or last few days for date-filtered sources) rather than tracking
-per-source state. RSS readers dedupe by <guid> on their end, so a feed
-that always contains the latest ~200 items per category works fine and
-keeps this script simple and stateless.
+Each run persists normalized, versioned source records in Neon before
+building feeds from durable history. Repeated overlapping polls are safe:
+the event store de-duplicates by source id and payload hash while retaining
+upstream revisions as distinct events.
 """
 import html
 import os
@@ -16,6 +15,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from feedgen.feed import FeedGenerator
+
+from dates import parse_date
+from event_store import EventStore, load_local_env
+from feed_extensions import GovEntryExtension, GovExtension
 
 from scrapers import (
     sec_edgar,
@@ -33,6 +36,8 @@ from scrapers import (
 
 OUT_DIR = Path(__file__).parent / "docs" / "feeds"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
+load_local_env()
+FEED_ITEM_LIMIT = int(os.environ.get("FEED_ITEM_LIMIT", "500"))
 
 CATEGORY_LABELS = {
     "sec": "SEC",
@@ -56,24 +61,6 @@ SCRAPERS = [
     ("CFPB complaints", cfpb.fetch_items),
     ("OFAC sanctions actions", ofac.fetch_items),
 ]
-
-
-def _parse_date(value):
-    """Best-effort parse of whatever date string a scraper handed back.
-    Falls back to "now" so items without a usable date still sort/appear
-    rather than crashing feed generation.
-    """
-    if not value:
-        return datetime.now(timezone.utc)
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%a, %d %b %Y %H:%M:%S %Z", "%a, %d %b %Y %H:%M:%S %z"):
-        try:
-            dt = datetime.strptime(value, fmt)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt
-        except ValueError:
-            continue
-    return datetime.now(timezone.utc)
 
 
 def run_all_scrapers():
@@ -102,7 +89,7 @@ def _clean_text(value):
         return ""
     value = html.unescape(value)
     value = _MOJIBAKE_CTRL.sub("", value)
-    return value
+    return " ".join(value.split())
 
 
 def _pages_base_url():
@@ -119,6 +106,7 @@ def _pages_base_url():
 
 def build_feed(title, description, link, items, out_path):
     fg = FeedGenerator()
+    fg.register_extension("gov", GovExtension, GovEntryExtension, atom=False, rss=True)
     fg.title(title)
     fg.link(href=link, rel="alternate")
     fg.link(href=f"{_pages_base_url()}/feeds/{out_path.name}", rel="self")
@@ -138,22 +126,39 @@ def build_feed(title, description, link, items, out_path):
         seen_ids.add(item["id"])
         deduped.append(item)
 
-    items_sorted = sorted(deduped, key=lambda i: _parse_date(i.get("published")), reverse=True)
-    for item in items_sorted[:200]:
+    oldest = datetime.min.replace(tzinfo=timezone.utc)
+    items_sorted = sorted(deduped, key=lambda i: parse_date(i.get("published")) or oldest, reverse=True)
+    for item in items_sorted[:FEED_ITEM_LIMIT]:
         fe = fg.add_entry()
         fe.id(item["id"])
         fe.title(_clean_text(item["title"])[:300])
         fe.link(href=item["link"])
         fe.description(_clean_text(item.get("summary", "")))
-        fe.pubDate(_parse_date(item.get("published")))
-        fe.source(item.get("source_name", ""))
+        fe.pubDate(parse_date(item.get("published")) or oldest)
+        if item.get("source_name"):
+            fe.category(term=item["source_name"])
+        for category in (item.get("department_name"), item.get("company_name")):
+            if category:
+                fe.category(term=str(category))
+        fe.gov.fields(
+            {
+                "company_name": item.get("company_name"),
+                "entity_name": item.get("entity_name"),
+                "department_name": item.get("department_name"),
+                "amount": item.get("amount"),
+                "amount_currency": item.get("amount_currency"),
+                "amount_type": item.get("amount_type"),
+                "event_date": item.get("event_date"),
+            }
+        )
 
     fg.rss_file(str(out_path))
-    print(f"wrote {out_path} ({len(items_sorted[:200])} items, {len(items) - len(deduped)} duplicate ids dropped)")
+    print(f"wrote {out_path} ({len(items_sorted[:FEED_ITEM_LIMIT])} items, {len(items) - len(deduped)} duplicate ids dropped)")
 
 
-def main():
-    all_items = run_all_scrapers()
+def build_outputs(store):
+    """Build all public files from durable Neon history."""
+    all_items = store.fetch_items(limit=FEED_ITEM_LIMIT)
 
     # Combined feed, everything
     build_feed(
@@ -166,7 +171,7 @@ def main():
 
     # One feed per dashboard category
     for cat, label in CATEGORY_LABELS.items():
-        cat_items = [i for i in all_items if i.get("category") == cat]
+        cat_items = store.fetch_items(category=cat, limit=FEED_ITEM_LIMIT)
         build_feed(
             title=f"Federal Document Tracker — {label}",
             description=f"{label} filings and documents.",
@@ -185,6 +190,21 @@ def main():
         index_html.append(f'<li><a href="feeds/{cat}.xml">{label}</a></li>')
     index_html.append("</ul></body></html>")
     (OUT_DIR.parent / "index.html").write_text("\n".join(index_html))
+
+
+def main():
+    scraped_items = run_all_scrapers()
+    store = EventStore.from_env()
+    result = store.store_items(scraped_items)
+    print(
+        "retention: "
+        f"received={result.received} accepted={result.accepted} "
+        f"rejected_expired={result.rejected_expired} "
+        f"rejected_future={result.rejected_future}"
+    )
+    pruned_count = store.prune_expired()
+    print(f"retention: physically_pruned={pruned_count}")
+    build_outputs(store)
 
 
 if __name__ == "__main__":

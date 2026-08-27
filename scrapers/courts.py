@@ -76,5 +76,8 @@ def fetch_items(page_size=40):
             "published": date_filed,  # empty string sorts to "now" in build_feeds, which is a safe default
             "category": CATEGORY,
             "source_name": SOURCE_NAME,
+            "entity_name": case_name,
+            "department_name": f"Federal Judiciary — {court}" if court else "Federal Judiciary",
+            "event_date": date_filed,
         })
     return items
