@@ -4,7 +4,7 @@ Scheduled scrapers for the sources on the regulatory/financial + national
 security/DOJ/courts + Congress/oversight dashboard, publishing results as
 RSS feeds you can subscribe to in any feed reader.
 
-Runs on **GitHub Actions** hourly by default, stores versioned events
+Runs on **GitHub Actions** every 10 minutes by default, stores versioned events
 in **Neon Postgres**, and publishes feeds via **GitHub Pages**.
 
 Each event also has queryable columns for its event date, company, broader
@@ -14,7 +14,7 @@ dollar figures inferred from release text (`mentioned_amount`).
 
 The live archive retains seven UTC calendar dates: today and the preceding six
 days. Older and future-dated source records are rejected; undated records expire
-seven calendar dates after first discovery. The hourly run also physically
+seven calendar dates after first discovery. Each scheduled run also physically
 prunes anything outside that window before rebuilding the feeds.
 
 ## What's covered
@@ -103,7 +103,7 @@ choice.
   firehose by default. Set a `COURTLISTENER_QUERY` secret (a company or
   person name) to narrow it to filings mentioning that name instead.
 - **Schedule frequency**: edit the `cron` line in
-  `.github/workflows/scrape.yml`. The default is hourly; SEC in particular
+  `.github/workflows/scrape.yml`. The default is every 10 minutes; SEC in particular
   asks scripted clients to keep request rates modest, so avoid needlessly
   aggressive polling.
 
