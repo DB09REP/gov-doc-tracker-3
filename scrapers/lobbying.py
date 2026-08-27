@@ -34,6 +34,12 @@ def fetch_items(page_size=40):
         filing_type = f.get("filing_type_display", "Filing")
         posted = f.get("dt_posted", "")
         filing_uuid = f.get("filing_uuid", filing_url)
+        income = f.get("income")
+        expenses = f.get("expenses")
+        amount = income if income is not None else expenses
+        amount_type = "lobbying_reported_income" if income is not None else (
+            "lobbying_reported_expenses" if expenses is not None else None
+        )
         items.append({
             "id": f"lda-{filing_uuid}",
             "title": f"{filing_type} — {registrant} for {client}",
@@ -42,5 +48,12 @@ def fetch_items(page_size=40):
             "published": posted,
             "category": CATEGORY,
             "source_name": SOURCE_NAME,
+            "company_name": client,
+            "entity_name": registrant,
+            "department_name": "Congress — Lobbying Disclosure Act",
+            "amount": amount,
+            "amount_currency": "USD" if amount is not None else None,
+            "amount_type": amount_type,
+            "event_date": posted,
         })
     return items

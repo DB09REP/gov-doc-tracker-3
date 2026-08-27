@@ -2,7 +2,7 @@ name: Scrape federal document sources
 
 on:
   schedule:
-    - cron: "15 */3 * * *"
+    - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -27,8 +27,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Apply database migrations
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: python migrate.py
+
       - name: Run scrapers and build feeds
         env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SCRAPER_CONTACT_EMAIL: ${{ secrets.SCRAPER_CONTACT_EMAIL }}
           FEC_API_KEY: ${{ secrets.FEC_API_KEY }}
           LDA_API_KEY: ${{ secrets.LDA_API_KEY }}

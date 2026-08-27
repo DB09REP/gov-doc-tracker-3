@@ -49,5 +49,7 @@ def fetch_items(limit=40):
             "published": updated,
             "category": CATEGORY,
             "source_name": SOURCE_NAME,
+            "department_name": "United States Congress",
+            "event_date": updated,
         })
     return items

@@ -19,8 +19,12 @@ def fetch_items(days_back=3, limit=40):
             "time_period": [{"start_date": since, "end_date": today}],
             "award_type_codes": ["A", "B", "C", "D"],  # contracts
         },
-        "fields": ["Award ID", "Recipient Name", "Awarding Agency", "Start Date", "Award Amount", "generated_internal_id"],
-        "sort": "Start Date",
+        "fields": [
+            "Award ID", "Recipient Name", "Awarding Agency", "Start Date",
+            "Base Obligation Date", "Last Modified Date", "Award Amount",
+            "Description", "generated_internal_id",
+        ],
+        "sort": "Base Obligation Date",
         "order": "desc",
         "limit": limit,
         "page": 1,
@@ -40,6 +44,7 @@ def fetch_items(days_back=3, limit=40):
         recipient = r.get("Recipient Name", "Unknown recipient")
         agency = r.get("Awarding Agency", "")
         start = r.get("Start Date", "")
+        event_date = r.get("Base Obligation Date") or r.get("Last Modified Date") or start
         amount = r.get("Award Amount", "")
         internal_id = r.get("generated_internal_id", award_id)
         link = f"https://www.usaspending.gov/award/{internal_id}"
@@ -47,9 +52,16 @@ def fetch_items(days_back=3, limit=40):
             "id": f"usaspending-{internal_id}",
             "title": f"{recipient} — {agency} (${amount})",
             "link": link,
-            "summary": f"Award {award_id} to {recipient} from {agency}, starting {start}.",
-            "published": start,
+            "summary": r.get("Description") or f"Award {award_id} to {recipient} from {agency}.",
+            "published": event_date,
             "category": CATEGORY,
             "source_name": SOURCE_NAME,
+            "company_name": recipient,
+            "entity_name": recipient,
+            "department_name": agency,
+            "amount": amount,
+            "amount_currency": "USD",
+            "amount_type": "award_total",
+            "event_date": event_date,
         })
     return items

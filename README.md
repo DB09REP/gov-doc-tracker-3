@@ -4,8 +4,18 @@ Scheduled scrapers for the sources on the regulatory/financial + national
 security/DOJ/courts + Congress/oversight dashboard, publishing results as
 RSS feeds you can subscribe to in any feed reader.
 
-Runs on **GitHub Actions** (free, no server) every 3 hours by default, and
-publishes feeds via **GitHub Pages**.
+Runs on **GitHub Actions** every 10 minutes by default, stores versioned events
+in **Neon Postgres**, and publishes feeds via **GitHub Pages**.
+
+Each event also has queryable columns for its event date, company, broader
+entity, department/agency, amount, currency, and amount type. Values supplied
+by an API (for example a USASpending award total) are labelled separately from
+dollar figures inferred from release text (`mentioned_amount`).
+
+The live archive retains seven UTC calendar dates: today and the preceding six
+days. Older and future-dated source records are rejected; undated records expire
+seven calendar dates after first discovery. Each scheduled run also physically
+prunes anything outside that window before rebuilding the feeds.
 
 ## What's covered
 
@@ -58,6 +68,8 @@ much better coverage with these free keys:
 | `LDA_API_KEY` | https://lda.gov/api/register/ | Optional (anonymous access works, harder rate limit) |
 | `COURTLISTENER_TOKEN` | https://www.courtlistener.com/ (free account) | Optional |
 | `CONGRESS_API_KEY` | https://api.congress.gov/sign-up/ | **Required** for the Congress.gov scraper — it returns nothing without a key |
+| `DATABASE_URL` | Written by `neon env pull` | **Required** — pooled Neon connection used by the application |
+| `DATABASE_URL_UNPOOLED` | Written by `neon env pull` | **Required** — direct Neon connection used for migrations |
 
 ### 3. Enable GitHub Pages
 Settings → Pages → Source: "Deploy from a branch" → Branch: `main`,
@@ -91,10 +103,9 @@ choice.
   firehose by default. Set a `COURTLISTENER_QUERY` secret (a company or
   person name) to narrow it to filings mentioning that name instead.
 - **Schedule frequency**: edit the `cron` line in
-  `.github/workflows/scrape.yml`. Every 3 hours is a reasonable default;
-  government sites don't update fast enough to need much tighter than
-  hourly, and SEC in particular asks scripted clients to keep request
-  rates modest.
+  `.github/workflows/scrape.yml`. The default is every 10 minutes; SEC in particular
+  asks scripted clients to keep request rates modest, so avoid needlessly
+  aggressive polling.
 
 ## Fragile scrapers (no official API)
 
@@ -115,10 +126,31 @@ Oversight.gov just needs someone testing against the live page directly.
 
 ```bash
 pip install -r requirements.txt
+neon env pull
+python migrate.py
+python backfill_structured.py
 python build_feeds.py
 ```
 
-Feeds land in `docs/feeds/`. Note: this sandbox environment couldn't
-reach government sites to test live output, so **your first real GitHub
-Actions run is the real test** — check the run log for `[FAIL]` lines
-and open an issue against the specific scraper if one's broken.
+`neon env pull` writes the linked branch's pooled and direct connection
+strings to the gitignored `.env.local`. Feeds land in `docs/feeds/`; durable
+event versions remain in Neon even when a source is temporarily unavailable.
+
+## Local reporting dashboard
+
+Run the **dashboard** process from Conductor, or start it manually:
+
+```bash
+.venv/bin/python dashboard.py --port 8000
+```
+
+Then open `http://127.0.0.1:8000`. It reads the linked Neon database through a
+localhost-only Python process and refreshes every 30 seconds. You can search and
+filter by company, department, source, amount range, and date range, and sort by
+amount to surface unusually large payments. Database credentials remain in the
+server-side `.env.local`; they are never sent to the browser.
+
+The generated RSS files expose the same structured values as namespaced
+`gov:company`, `gov:entity`, `gov:department`, `gov:amount`, `gov:amountType`,
+and `gov:eventDate` elements. Common feed readers can also filter companies and
+departments through ordinary RSS categories.
