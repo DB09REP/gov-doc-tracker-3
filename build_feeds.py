@@ -17,6 +17,7 @@ from pathlib import Path
 from feedgen.feed import FeedGenerator
 
 from dates import parse_date
+from dashboard_data import write_public_dashboard
 from event_store import EventStore, load_local_env
 from feed_extensions import GovEntryExtension, GovExtension
 
@@ -180,16 +181,7 @@ def build_outputs(store):
             out_path=OUT_DIR / f"{cat}.xml",
         )
 
-    # Simple index page linking to all feeds
-    index_html = ["<html><head><title>Federal Document Tracker Feeds</title></head><body>",
-                  "<h1>Federal Document Tracker — RSS Feeds</h1>",
-                  f"<p>Last built: {datetime.now(timezone.utc).isoformat()}</p>",
-                  "<ul>",
-                  '<li><a href="feeds/all.xml">All sources (combined)</a></li>']
-    for cat, label in CATEGORY_LABELS.items():
-        index_html.append(f'<li><a href="feeds/{cat}.xml">{label}</a></li>')
-    index_html.append("</ul></body></html>")
-    (OUT_DIR.parent / "index.html").write_text("\n".join(index_html))
+    write_public_dashboard(store, output_dir=OUT_DIR.parent)
 
 
 def main():

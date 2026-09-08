@@ -1,12 +1,253 @@
-<html><head><title>Federal Document Tracker Feeds</title></head><body>
-<h1>Federal Document Tracker — RSS Feeds</h1>
-<p>Last built: 2026-09-07T12:36:49.782664+00:00</p>
-<ul>
-<li><a href="feeds/all.xml">All sources (combined)</a></li>
-<li><a href="feeds/sec.xml">SEC</a></li>
-<li><a href="feeds/fec.xml">FEC</a></li>
-<li><a href="feeds/lobbying.xml">Lobbying</a></li>
-<li><a href="feeds/courts.xml">Courts / DOJ</a></li>
-<li><a href="feeds/congress.xml">Congress / Oversight</a></li>
-<li><a href="feeds/adjacent.xml">Adjacent (Federal Register, USASpending, OFAC, CFPB)</a></li>
-</ul></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Search recent US federal filings, awards, enforcement actions and public records.">
+  <title>Federal Document Tracker</title>
+  <style>
+    :root { color-scheme:light; --ink:#17211d; --muted:#627069; --paper:#f5f1e8; --line:#d5d0c4; --accent:#a72a1d; --panel:#fffdf8; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:14px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif; }
+    header { padding:28px clamp(18px,4vw,56px) 20px; border-bottom:4px solid var(--ink); }
+    h1 { margin:0; font:700 clamp(27px,4vw,48px)/1 Georgia,serif; letter-spacing:-.025em; }
+    header p { color:var(--muted); margin:10px 0 0; max-width:850px; }
+    header nav { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:15px; }
+    main { padding:20px clamp(18px,4vw,56px) 50px; }
+    .filters { display:grid; grid-template-columns:2fr repeat(3,minmax(150px,1fr)); gap:10px; }
+    .filters.secondary { grid-template-columns:repeat(5,minmax(120px,1fr)); margin-top:10px; }
+    input,select,button { width:100%; border:1px solid var(--line); border-radius:4px; background:var(--panel); color:var(--ink); padding:10px; font:inherit; }
+    button { cursor:pointer; background:var(--ink); color:white; font-weight:700; }
+    .filter-actions { display:flex; align-items:center; gap:12px; margin-top:10px; }
+    .check { display:flex; align-items:center; gap:7px; color:var(--muted); }
+    .check input { width:auto; }
+    .clear { width:auto; padding:6px 10px; background:transparent; color:var(--ink); }
+    .stats { display:flex; gap:24px; margin:18px 0 12px; color:var(--muted); flex-wrap:wrap; }
+    .stats strong { color:var(--ink); }
+    .status { margin-left:auto; }
+    .table-wrap { overflow:auto; border-top:2px solid var(--ink); background:var(--panel); }
+    table { border-collapse:collapse; min-width:1050px; width:100%; }
+    th { position:sticky; top:0; background:var(--ink); color:white; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.08em; padding:10px; }
+    td { border-bottom:1px solid var(--line); padding:11px 10px; vertical-align:top; }
+    td.date,td.amount { white-space:nowrap; font-variant-numeric:tabular-nums; }
+    td.amount { font-weight:700; }
+    a { color:var(--ink); font-weight:700; text-decoration-thickness:1px; text-underline-offset:2px; }
+    .source,.kind { color:var(--muted); font-size:12px; }
+    .outlier { color:var(--accent); font-weight:700; }
+    .empty { text-align:center; padding:40px; color:var(--muted); }
+    @media (max-width:850px) { .filters,.filters.secondary { grid-template-columns:1fr 1fr; } .status { width:100%; margin-left:0; } }
+    @media (max-width:520px) { .filters,.filters.secondary { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Federal Document Tracker</h1>
+    <p>A seven-day, searchable layer over US government filings, awards, enforcement actions and public records. Source links lead to the original documents.</p>
+    <nav aria-label="RSS feeds">
+      <a href="feeds/all.xml">All-source RSS</a>
+      <a href="feeds/sec.xml">SEC</a>
+      <a href="feeds/fec.xml">FEC</a>
+      <a href="feeds/lobbying.xml">Lobbying</a>
+      <a href="feeds/courts.xml">Courts / DOJ</a>
+      <a href="feeds/congress.xml">Congress</a>
+      <a href="feeds/adjacent.xml">Federal awards and agencies</a>
+    </nav>
+  </header>
+  <main>
+    <form id="filters">
+      <div class="filters">
+        <input name="q" type="search" placeholder="Search headlines, companies, departments…" aria-label="Search events">
+        <select name="company"><option value="">All companies</option></select>
+        <select name="department"><option value="">All departments</option></select>
+        <select name="source"><option value="">All sources</option></select>
+      </div>
+      <div class="filters secondary">
+        <input name="min_amount" type="number" min="0" step="any" placeholder="Minimum amount" aria-label="Minimum amount">
+        <input name="max_amount" type="number" min="0" step="any" placeholder="Maximum amount" aria-label="Maximum amount">
+        <input name="date_from" type="date" aria-label="From date">
+        <input name="date_to" type="date" aria-label="To date">
+        <select name="sort" aria-label="Sort events">
+          <option value="newest">Newest first</option>
+          <option value="amount_desc">Largest amount first</option>
+          <option value="amount_asc">Smallest amount first</option>
+          <option value="oldest">Oldest first</option>
+        </select>
+      </div>
+      <div class="filter-actions">
+        <label class="check"><input name="has_amount" type="checkbox"> Only events with amounts</label>
+        <button class="clear" id="clear" type="button">Clear filters</button>
+      </div>
+    </form>
+    <div class="stats" aria-live="polite">
+      <span><strong id="shown">—</strong> matches</span>
+      <span><strong id="with-amount">—</strong> with amounts</span>
+      <span>Largest: <strong id="largest">—</strong></span>
+      <span class="status" id="status">Loading…</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Amount</th><th>Company / entity</th><th>Department</th><th>Headline</th><th>Source</th></tr></thead>
+        <tbody id="events"><tr><td class="empty" colspan="6">Loading events…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+  <script>
+    const dataEndpoint = "data/events.json";
+    const form = document.querySelector('#filters');
+    const body = document.querySelector('#events');
+    const money = new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',maximumFractionDigits:0});
+    const maximumRenderedRows = 500;
+    let allEvents = [];
+
+    function text(tag, value, className='') {
+      const element = document.createElement(tag);
+      element.textContent = value || '—';
+      element.className = className;
+      return element;
+    }
+
+    function setOptions(name, values, label) {
+      const select = form.elements[name];
+      const selected = select.value;
+      select.replaceChildren(new Option(label, ''));
+      values.forEach(value => select.add(new Option(value, value)));
+      select.value = values.includes(selected) ? selected : '';
+    }
+
+    function eventDate(event) {
+      return event.event_date || (event.published_at || '').slice(0, 10);
+    }
+
+    function compareDates(left, right, direction) {
+      const a = eventDate(left), b = eventDate(right);
+      if (!a && !b) return 0;
+      if (!a) return 1;
+      if (!b) return -1;
+      return direction * a.localeCompare(b);
+    }
+
+    function filteredEvents() {
+      const values = Object.fromEntries(new FormData(form));
+      const query = (values.q || '').trim().toLocaleLowerCase();
+      const minimum = values.min_amount === '' ? null : Number(values.min_amount);
+      const maximum = values.max_amount === '' ? null : Number(values.max_amount);
+      const hasAmount = form.elements.has_amount.checked;
+      const filtered = allEvents.filter(event => {
+        const searchable = [event.title, event.summary, event.company_name, event.entity_name, event.department_name, event.source_name]
+          .filter(Boolean).join(' ').toLocaleLowerCase();
+        const date = event.event_date || '';
+        return (!query || searchable.includes(query))
+          && (!values.company || event.company_name === values.company)
+          && (!values.department || event.department_name === values.department)
+          && (!values.source || event.source_name === values.source)
+          && (minimum === null || (event.amount_value !== null && Number(event.amount_value) >= minimum))
+          && (maximum === null || (event.amount_value !== null && Number(event.amount_value) <= maximum))
+          && (!values.date_from || (date && date >= values.date_from))
+          && (!values.date_to || (date && date <= values.date_to))
+          && (!hasAmount || event.amount_value !== null);
+      });
+      if (values.sort === 'amount_desc' || values.sort === 'amount_asc') {
+        const direction = values.sort === 'amount_desc' ? -1 : 1;
+        filtered.sort((a, b) => {
+          if (a.amount_value === null && b.amount_value === null) return compareDates(a, b, -1);
+          if (a.amount_value === null) return 1;
+          if (b.amount_value === null) return -1;
+          return direction * (Number(a.amount_value) - Number(b.amount_value));
+        });
+      } else {
+        filtered.sort((a, b) => compareDates(a, b, values.sort === 'oldest' ? 1 : -1));
+      }
+      return filtered;
+    }
+
+    function updateAddress() {
+      const params = new URLSearchParams(new FormData(form));
+      for (const [key, value] of [...params]) if (!value) params.delete(key);
+      if (form.elements.has_amount.checked) params.set('has_amount', '1');
+      else params.delete('has_amount');
+      if (params.get('sort') === 'newest') params.delete('sort');
+      history.replaceState(null, '', params.size ? '?' + params : location.pathname);
+    }
+
+    function render() {
+      const events = filteredEvents();
+      const visible = events.slice(0, maximumRenderedRows);
+      body.replaceChildren();
+      if (!events.length) {
+        const row = document.createElement('tr');
+        const cell = text('td', allEvents.length ? 'No matching events' : 'No current events — waiting for the next sync', 'empty');
+        cell.colSpan = 6;
+        row.append(cell);
+        body.append(row);
+      }
+      visible.forEach(event => {
+        const row = document.createElement('tr');
+        row.append(text('td', event.event_date, 'date'));
+        const amount = text('td', event.amount_value == null ? '—' : money.format(event.amount_value), 'amount');
+        if (event.amount_type) amount.append(text('div', event.amount_type.replaceAll('_', ' '), 'kind'));
+        if (event.amount_percentile >= .95) amount.append(text('div', 'Top 5% for this source/type', 'kind outlier'));
+        row.append(amount);
+        row.append(text('td', event.company_name || event.entity_name));
+        row.append(text('td', event.department_name));
+        const headline = document.createElement('td');
+        const link = document.createElement('a');
+        link.textContent = event.title || 'Untitled';
+        if (/^https?:\/\//i.test(event.link || '')) {
+          link.href = event.link;
+          link.target = '_blank';
+          link.rel = 'noopener';
+        }
+        headline.append(link);
+        row.append(headline);
+        row.append(text('td', event.source_name, 'source'));
+        body.append(row);
+      });
+      const amounts = events.map(event => event.amount_value).filter(value => value !== null).map(Number);
+      document.querySelector('#shown').textContent = events.length > maximumRenderedRows ? `${events.length} (${maximumRenderedRows} displayed)` : events.length;
+      document.querySelector('#with-amount').textContent = amounts.length;
+      document.querySelector('#largest').textContent = amounts.length ? money.format(Math.max(...amounts)) : '—';
+      updateAddress();
+    }
+
+    function loadAddress() {
+      const params = new URLSearchParams(location.search);
+      for (const [key, value] of params) {
+        if (!form.elements[key]) continue;
+        if (key === 'has_amount') form.elements[key].checked = value === '1' || value === 'true';
+        else form.elements[key].value = value;
+      }
+    }
+
+    async function refresh() {
+      document.querySelector('#status').textContent = 'Checking for updates…';
+      try {
+        const separator = dataEndpoint.includes('?') ? '&' : '?';
+        const response = await fetch(`${dataEndpoint}${separator}v=${Date.now()}`, {cache:'no-store'});
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        allEvents = Array.isArray(data.events) ? data.events : [];
+        setOptions('company', data.facets?.companies || [], 'All companies');
+        setOptions('department', data.facets?.departments || [], 'All departments');
+        setOptions('source', data.facets?.sources || [], 'All sources');
+        render();
+        const refreshed = data.stats?.refreshed_at ? new Date(data.stats.refreshed_at).toLocaleString() : 'unknown';
+        document.querySelector('#status').textContent = `Data synced ${refreshed} · checking every 30s`;
+      } catch (error) {
+        document.querySelector('#status').textContent = 'Refresh failed: ' + error.message;
+      }
+    }
+
+    form.addEventListener('input', () => {
+      clearTimeout(window.filterTimer);
+      window.filterTimer = setTimeout(render, 100);
+    });
+    document.querySelector('#clear').addEventListener('click', () => {
+      form.reset();
+      render();
+    });
+    loadAddress();
+    refresh();
+    setInterval(refresh, 30000);
+  </script>
+</body>
+</html>

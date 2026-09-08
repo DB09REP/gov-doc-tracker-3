@@ -276,7 +276,7 @@ class EventStore:
         }
         ordering = orderings.get(filters.get("sort"), orderings["newest"])
         try:
-            limit = min(max(int(filters.get("limit", 100)), 1), 500)
+            limit = min(max(int(filters.get("limit", 100)), 1), 5000)
         except (TypeError, ValueError):
             limit = 100
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""

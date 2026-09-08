@@ -5,7 +5,8 @@ security/DOJ/courts + Congress/oversight dashboard, publishing results as
 RSS feeds you can subscribe to in any feed reader.
 
 Runs on **GitHub Actions** every 10 minutes by default, stores versioned events
-in **Neon Postgres**, and publishes feeds via **GitHub Pages**.
+in **Neon Postgres**, and publishes a searchable dashboard plus RSS feeds via
+**GitHub Pages**.
 
 Each event also has queryable columns for its event date, company, broader
 entity, department/agency, amount, currency, and amount type. Values supplied
@@ -75,7 +76,13 @@ much better coverage with these free keys:
 Settings → Pages → Source: "Deploy from a branch" → Branch: `main`,
 folder: `/docs`. Save.
 
-Your feeds will be live at:
+The public dashboard will be live at:
+
+```
+https://<your-username>.github.io/<your-repo>/
+```
+
+Feeds will be live at:
 ```
 https://<your-username>.github.io/<your-repo>/feeds/all.xml
 https://<your-username>.github.io/<your-repo>/feeds/sec.xml
@@ -85,7 +92,10 @@ https://<your-username>.github.io/<your-repo>/feeds/courts.xml
 https://<your-username>.github.io/<your-repo>/feeds/congress.xml
 https://<your-username>.github.io/<your-repo>/feeds/adjacent.xml
 ```
-An index page listing all of them is at the repo's Pages root.
+The Pages dashboard loads `docs/data/events.json`, a sanitized snapshot written
+from Neon by the scheduled Action. It rechecks that file every 30 seconds; new
+source data appears after the next 10-minute Action completes. Neon connection
+strings remain server-side in Actions secrets and are never shipped to browsers.
 
 ### 4. Trigger the first run manually
 Actions tab → "Scrape federal document sources" → "Run workflow." Don't
@@ -132,9 +142,10 @@ python backfill_structured.py
 python build_feeds.py
 ```
 
-`neon env pull` writes the linked branch's pooled and direct connection
-strings to the gitignored `.env.local`. Feeds land in `docs/feeds/`; durable
-event versions remain in Neon even when a source is temporarily unavailable.
+`neon env pull` writes the linked branch's pooled and direct connection strings
+to the gitignored `.env.local`. The dashboard snapshot lands in
+`docs/data/events.json`, feeds land in `docs/feeds/`, and durable event versions
+remain in Neon even when a source is temporarily unavailable.
 
 ## Local reporting dashboard
 
@@ -149,6 +160,15 @@ localhost-only Python process and refreshes every 30 seconds. You can search and
 filter by company, department, source, amount range, and date range, and sort by
 amount to surface unusually large payments. Database credentials remain in the
 server-side `.env.local`; they are never sent to the browser.
+
+To preview the exact static GitHub Pages build instead, generate it and serve
+the `docs` directory over localhost (browsers generally block JSON fetches from
+a double-clicked `file://` page):
+
+```bash
+python build_feeds.py
+python -m http.server 8000 --directory docs
+```
 
 The generated RSS files expose the same structured values as namespaced
 `gov:company`, `gov:entity`, `gov:department`, `gov:amount`, `gov:amountType`,

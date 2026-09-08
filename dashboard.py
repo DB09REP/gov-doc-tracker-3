@@ -2,23 +2,14 @@
 
 import argparse
 import os
-from datetime import date, datetime
-from decimal import Decimal
 
 from flask import Flask, jsonify, render_template, request
 
+from dashboard_data import build_dashboard_payload
 from event_store import EventStore
 
 
 app = Flask(__name__)
-
-
-def _json_value(value):
-    if isinstance(value, Decimal):
-        return float(value)
-    if isinstance(value, (date, datetime)):
-        return value.isoformat()
-    return value
 
 
 @app.after_request
@@ -34,7 +25,7 @@ def secure_local_response(response):
 
 @app.get("/")
 def index():
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", data_endpoint="/api/events?limit=5000")
 
 
 @app.get("/api/events")
@@ -44,25 +35,11 @@ def events_api():
         "date_from", "date_to", "has_amount", "sort", "limit",
     }
     filters = {key: request.args.get(key) for key in allowed if request.args.get(key)}
-    rows, facets = EventStore.from_env().search_events(filters)
-    events = [{key: _json_value(value) for key, value in row.items()} for row in rows]
-    amounts = [row["amount_value"] for row in rows if row["amount_value"] is not None]
-    return jsonify(
-        {
-            "events": events,
-            "facets": {
-                "sources": facets["sources"] or [],
-                "companies": facets["companies"] or [],
-                "departments": facets["departments"] or [],
-            },
-            "stats": {
-                "shown": len(events),
-                "with_amount": len(amounts),
-                "largest_amount": _json_value(max(amounts)) if amounts else None,
-                "refreshed_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-            },
-        }
+    limit = filters.pop("limit", 5000)
+    payload = build_dashboard_payload(
+        EventStore.from_env(), filters=filters, limit=limit
     )
+    return jsonify(payload)
 
 
 def main():
