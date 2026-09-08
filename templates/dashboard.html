@@ -92,7 +92,7 @@
     </div>
   </main>
   <script>
-    const dataEndpoint = "data/events.json";
+    const dataEndpoint = {{ data_endpoint|tojson }};
     const form = document.querySelector('#filters');
     const body = document.querySelector('#events');
     const money = new Intl.NumberFormat('en-US', {style:'currency',currency:'USD',maximumFractionDigits:0});

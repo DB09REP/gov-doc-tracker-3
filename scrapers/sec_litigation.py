@@ -43,6 +43,8 @@ def _parse_rss(xml_text, source_name):
             "published": pub,
             "category": CATEGORY,
             "source_name": source_name,
+            "department_name": "Securities and Exchange Commission",
+            "event_date": pub,
         })
     return items
 

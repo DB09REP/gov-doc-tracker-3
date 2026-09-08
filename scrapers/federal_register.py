@@ -38,5 +38,7 @@ def fetch_items(days_back=2, per_page=40):
             "published": pub_date,
             "category": CATEGORY,
             "source_name": SOURCE_NAME,
+            "department_name": agencies or None,
+            "event_date": pub_date,
         })
     return items

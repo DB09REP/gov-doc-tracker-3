@@ -75,5 +75,9 @@ def fetch_items(days_back=5):
                 "published": date_filed,
                 "category": CATEGORY,
                 "source_name": SOURCE_NAME,
+                "company_name": company.strip(),
+                "entity_name": company.strip(),
+                "department_name": "Securities and Exchange Commission",
+                "event_date": date_filed,
             })
     return items

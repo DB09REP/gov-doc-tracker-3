@@ -11,7 +11,11 @@ BASE = "https://www.justice.gov/api/v1/press_releases.json"
 
 
 def fetch_items(page_size=40):
-    params = {"pagesize": page_size}
+    params = {
+        "pagesize": page_size,
+        "sort": "created",
+        "direction": "DESC",
+    }
     try:
         resp = get(BASE, params=params)
     except Exception as exc:
@@ -45,5 +49,7 @@ def fetch_items(page_size=40):
             "published": date,
             "category": CATEGORY,
             "source_name": SOURCE_NAME,
+            "department_name": f"Department of Justice — {component}" if component else "Department of Justice",
+            "event_date": date,
         })
     return items
