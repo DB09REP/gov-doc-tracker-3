@@ -26,6 +26,20 @@ PUBLIC_EVENT_FIELDS = (
     "event_date",
     "published_at",
 )
+PUBLIC_SOURCE_NAMES = (
+    "CFPB — recent consumer complaints",
+    "Congress.gov — recent bill activity",
+    "CourtListener — new RECAP filings",
+    "DOJ press releases",
+    "FEC — recent filings",
+    "Federal Register — new documents",
+    "Lobbying disclosures (LDA.gov)",
+    "OFAC — recent sanctions actions",
+    "SEC administrative proceedings",
+    "SEC EDGAR — new filings",
+    "SEC litigation releases",
+    "USASpending — new awards",
+)
 
 
 def json_value(value):
@@ -50,7 +64,9 @@ def build_dashboard_payload(store, *, filters=None, limit=5000, refreshed_at=Non
     return {
         "events": events,
         "facets": {
-            "sources": facets.get("sources") or [],
+            "sources": sorted(
+                set(facets.get("sources") or []).union(PUBLIC_SOURCE_NAMES)
+            ),
             "companies": facets.get("companies") or [],
             "departments": facets.get("departments") or [],
         },

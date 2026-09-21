@@ -55,6 +55,7 @@ def test_payload_is_serializable_and_exposes_only_public_fields():
     assert payload["events"][0]["amount_value"] == 1250000.5
     assert payload["events"][0]["event_date"] == "2026-08-26"
     assert payload["events"][0]["published_at"] == NOW.isoformat()
+    assert "Lobbying disclosures (LDA.gov)" in payload["facets"]["sources"]
     assert payload["stats"] == {
         "total": 1,
         "with_amount": 1,

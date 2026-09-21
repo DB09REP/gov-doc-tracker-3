@@ -27,7 +27,7 @@ prunes anything outside that window before rebuilding the feeds.
 | Lobbying | LD-2/LD-203 filings via LDA.gov |
 | Courts / DOJ | New RECAP docket activity (CourtListener); DOJ press releases |
 | Congress / oversight | Recent bill activity (Congress.gov); Federal Register documents |
-| Adjacent | USASpending awards; CFPB complaints; OFAC sanctions actions* |
+| Adjacent | USASpending awards (including a dedicated Department of Defense slice); CFPB complaints; OFAC sanctions actions* |
 
 \* No official API — HTML-scraped, and the most likely to break if the
 source site redesigns. See "Fragile scrapers" below.
@@ -160,6 +160,10 @@ localhost-only Python process and refreshes every 30 seconds. You can search and
 filter by company, department, source, amount range, and date range, and sort by
 amount to surface unusually large payments. Database credentials remain in the
 server-side `.env.local`; they are never sent to the browser.
+
+The source dropdown lists every configured scraper even when a source returned
+no retained records in its latest run. This makes upstream outages visible
+instead of silently removing that source from the interface.
 
 To preview the exact static GitHub Pages build instead, generate it and serve
 the `docs` directory over localhost (browsers generally block JSON fetches from
