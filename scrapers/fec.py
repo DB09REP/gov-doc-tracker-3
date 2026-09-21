@@ -35,6 +35,17 @@ def fetch_items(per_page=40):
         committee = f.get("committee_name") or f.get("candidate_name") or "Unknown filer"
         form = f.get("form_type", "")
         receipt_date = f.get("receipt_date", "")
+        amount = None
+        amount_type = None
+        for field, label in (
+            ("total_contribution_period", "reported_contributions_period"),
+            ("total_contributions", "reported_contributions_total"),
+            ("total_disbursement_period", "reported_disbursements_period"),
+            ("total_disbursements", "reported_disbursements_total"),
+        ):
+            if f.get(field) is not None:
+                amount, amount_type = f[field], label
+                break
         pdf = f.get("pdf_url") or f.get("html_url") or f"https://www.fec.gov/data/filings/?data_type=processed&q={filing_id}"
         items.append({
             "id": f"fec-{filing_id}",
@@ -44,5 +55,11 @@ def fetch_items(per_page=40):
             "published": receipt_date,
             "category": CATEGORY,
             "source_name": SOURCE_NAME,
+            "entity_name": committee,
+            "department_name": "Federal Election Commission",
+            "amount": amount,
+            "amount_currency": "USD" if amount is not None else None,
+            "amount_type": amount_type,
+            "event_date": receipt_date,
         })
     return items

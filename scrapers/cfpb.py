@@ -33,5 +33,9 @@ def fetch_items(size=40):
             "published": date_received,
             "category": CATEGORY,
             "source_name": SOURCE_NAME,
+            "company_name": company,
+            "entity_name": company,
+            "department_name": "Consumer Financial Protection Bureau",
+            "event_date": date_received,
         })
     return items
